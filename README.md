@@ -13,9 +13,32 @@ npm run dev:full
 - Interface : URL Vite (souvent `http://localhost:5173`)
 - API / santé : `http://localhost:3000/api/health`
 
-Sans Postgres, les données sont enregistrées dans le dossier `data/` (créé automatiquement).
+### Postgres local (recommandé)
 
-Mode front seul (données uniquement dans le navigateur) :
+PostgreSQL 18 est utilisé en local avec la base `grh` :
+
+| Paramètre | Valeur |
+|-----------|--------|
+| Host | `127.0.0.1` |
+| Port | `5432` |
+| Base | `grh` |
+| User | `grh` |
+| Mot de passe | `grh_local_2026` |
+
+Le fichier `.env` (local, non versionné) contient déjà `DATABASE_URL`.  
+Sans Postgres, les données tombent dans le dossier `data/` (JSON).
+
+**Double écriture locale + Railway** (pour vos amis) :
+
+- En local, `VITE_MIRROR_API_URL` pousse aussi chaque sauvegarde vers Railway.
+- Pour republier toute la base locale d’un coup :
+
+```bash
+npm run server
+npm run sync:railway
+```
+
+Mode front seul (navigateur uniquement, sans API) :
 
 ```bash
 npm run dev

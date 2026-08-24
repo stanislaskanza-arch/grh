@@ -1,9 +1,8 @@
 /**
- * Synchronisation des stores locaux (localStorage) avec le serveur
- * (Postgres sur Railway, ou fichiers JSON en local).
+ * Synchronisation navigateur ↔ Postgres local (API) + miroir Railway.
  *
- * Au démarrage : compare la richesse locale vs cloud, puis hydrate ou pousse.
- * À chaque save : pousse vers le cloud (debounce).
+ * - API principale : VITE_API_URL (vide = même origine / proxy local :3000)
+ * - Miroir : VITE_MIRROR_API_URL (Railway) — chaque sauvegarde y est aussi poussée
  */
 
 export type CloudStoreKey = 'parametres' | 'recrutement' | 'paie'
@@ -23,8 +22,13 @@ function apiBase(): string {
   return raw ? raw.replace(/\/$/, '') : ''
 }
 
-function url(path: string) {
-  return `${apiBase()}${path}`
+function mirrorBase(): string {
+  const raw = (import.meta.env.VITE_MIRROR_API_URL as string | undefined)?.trim()
+  return raw ? raw.replace(/\/$/, '') : ''
+}
+
+function joinUrl(base: string, path: string) {
+  return `${base}${path}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,7 +39,6 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
 
-/** Score de richesse pour décider qui gagne (local vs cloud). */
 export function storeRichness(key: CloudStoreKey, data: unknown): number {
   if (!isRecord(data)) return 0
   if (key === 'recrutement') {
@@ -51,7 +54,6 @@ export function storeRichness(key: CloudStoreKey, data: unknown): number {
       asArray(data.paieMensuelleB2).length * 5
     )
   }
-  // parametres
   return (
     asArray(data.baremes1).length +
     asArray(data.baremes2).length +
@@ -84,8 +86,11 @@ function writeLocal(key: CloudStoreKey, data: unknown) {
   localStorage.setItem(LOCAL_KEYS[key], JSON.stringify(data))
 }
 
-async function fetchJson(path: string, init?: RequestInit) {
-  const res = await fetch(url(path), {
+async function fetchJsonAbsolute(
+  absoluteUrl: string,
+  init?: RequestInit,
+) {
+  const res = await fetch(absoluteUrl, {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -93,13 +98,28 @@ async function fetchJson(path: string, init?: RequestInit) {
       ...init?.headers,
     },
   })
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`)
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-/** Vérifie si l’API serveur est joignable. */
+async function fetchJson(path: string, init?: RequestInit) {
+  return fetchJsonAbsolute(joinUrl(apiBase(), path), init)
+}
+
+async function putStoreToBase(base: string, key: CloudStoreKey, data: unknown) {
+  if (!base) return false
+  try {
+    await fetchJsonAbsolute(joinUrl(base, `/api/stores/${key}`), {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Vérifie si l’API principale est joignable. */
 export async function isCloudAvailable(): Promise<boolean> {
   try {
     const data = await fetchJson('/api/health')
@@ -114,21 +134,20 @@ export type SyncResult = {
   available: boolean
   hydrated: CloudStoreKey[]
   uploaded: CloudStoreKey[]
+  mirrored?: CloudStoreKey[]
   persistence?: string
   error?: string
 }
 
 /**
- * Synchronise navigateur ↔ serveur.
- * - Si le cloud est plus riche : on hydrate le local.
- * - Si le local est plus riche (ou cloud vide) : on pousse le local.
- * - `forceUpload` : pousse toujours le local (migration manuelle).
+ * Synchronise navigateur ↔ API principale, puis miroir Railway si configuré.
  */
 export async function syncWithCloud(
   options: { forceUpload?: boolean } = {},
 ): Promise<SyncResult> {
   const hydrated: CloudStoreKey[] = []
   const uploaded: CloudStoreKey[] = []
+  const mirrored: CloudStoreKey[] = []
 
   try {
     const health = (await fetchJson('/api/health')) as {
@@ -141,6 +160,7 @@ export async function syncWithCloud(
         available: false,
         hydrated,
         uploaded,
+        mirrored,
         error: 'API indisponible',
       }
     }
@@ -153,6 +173,8 @@ export async function syncWithCloud(
       const remoteScore = storeRichness(key, remote)
       const localScore = storeRichness(key, local)
 
+      let canonical: unknown | null = null
+
       if (options.forceUpload) {
         if (local && isRecord(local)) {
           await fetchJson(`/api/stores/${key}`, {
@@ -160,35 +182,35 @@ export async function syncWithCloud(
             body: JSON.stringify(local),
           })
           uploaded.push(key)
+          canonical = local
         }
-        continue
-      }
-
-      if (remoteScore > localScore && isRecord(remote)) {
+      } else if (remoteScore > localScore && isRecord(remote)) {
         writeLocal(key, remote)
         hydrated.push(key)
-        continue
-      }
-
-      if (localScore > remoteScore && local && isRecord(local)) {
+        canonical = remote
+      } else if (localScore > remoteScore && local && isRecord(local)) {
         await fetchJson(`/api/stores/${key}`, {
           method: 'PUT',
           body: JSON.stringify(local),
         })
         uploaded.push(key)
-        continue
-      }
-
-      // égalité : si cloud présent, s’aligner dessus pour partager la même base
-      if (remoteScore > 0 && isRecord(remote)) {
+        canonical = local
+      } else if (remoteScore > 0 && isRecord(remote)) {
         writeLocal(key, remote)
         hydrated.push(key)
+        canonical = remote
       } else if (localScore > 0 && local && isRecord(local)) {
         await fetchJson(`/api/stores/${key}`, {
           method: 'PUT',
           body: JSON.stringify(local),
         })
         uploaded.push(key)
+        canonical = local
+      }
+
+      if (canonical && isRecord(canonical)) {
+        const okMirror = await putStoreToBase(mirrorBase(), key, canonical)
+        if (okMirror) mirrored.push(key)
       }
     }
 
@@ -197,6 +219,7 @@ export async function syncWithCloud(
       available: true,
       hydrated,
       uploaded,
+      mirrored,
       persistence: health.persistence,
     }
   } catch (err) {
@@ -205,12 +228,12 @@ export async function syncWithCloud(
       available: false,
       hydrated,
       uploaded,
+      mirrored,
       error: err instanceof Error ? err.message : 'Sync impossible',
     }
   }
 }
 
-/** @deprecated Utiliser syncWithCloud — conservé pour compatibilité. */
 export async function hydrateFromCloud(): Promise<{
   ok: boolean
   hydrated: CloudStoreKey[]
@@ -224,28 +247,29 @@ export async function hydrateFromCloud(): Promise<{
   }
 }
 
-/** Pousse les 3 stores locaux vers le cloud (migration forcée). */
 export async function pushAllLocalStores(): Promise<SyncResult> {
   return syncWithCloud({ forceUpload: true })
 }
 
-/** Pousse un store vers le cloud (immédiat). */
+/** Pousse un store vers l’API principale + miroir Railway. */
 export async function pushStoreNow(
   key: CloudStoreKey,
   data: unknown,
 ): Promise<boolean> {
+  let primaryOk = false
   try {
     await fetchJson(`/api/stores/${key}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     })
-    return true
+    primaryOk = true
   } catch {
-    return false
+    primaryOk = false
   }
+  await putStoreToBase(mirrorBase(), key, data)
+  return primaryOk
 }
 
-/** Pousse un store vers le cloud avec un court debounce. */
 export function schedulePushStore(key: CloudStoreKey, data: unknown) {
   const prev = pushTimers.get(key)
   if (prev) clearTimeout(prev)
