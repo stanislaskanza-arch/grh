@@ -768,8 +768,9 @@ export function loadParametresStore(): ParametresStore {
       JSON.stringify(parsed.baremes2 ?? []) !== JSON.stringify(store.baremes2)
 
     if (needsPersist) {
-      // Persistance silencieuse des migrations (sans boucler sur les listeners UI)
+      // Persistance silencieuse des migrations + sync cloud
       localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
+      schedulePushStore('parametres', store)
     }
 
     return store

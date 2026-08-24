@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { CloudSyncPanel } from '../components/CloudSyncPanel'
 
 const MODULES = [
   {
@@ -62,6 +63,8 @@ export function DashboardPage() {
           </p>
         </div>
       </header>
+
+      <CloudSyncPanel />
 
       <section className="dashboard-cards" aria-label="Modules GRH">
         {MODULES.map((mod) => (
