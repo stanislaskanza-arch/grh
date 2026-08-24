@@ -1,0 +1,26 @@
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Persistance locale fichier (serveur sans Postgres)
+/data
+
+# Fichiers temporaires / scripts debug
+scripts/tmp-*.txt
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.*
+!.env.example
