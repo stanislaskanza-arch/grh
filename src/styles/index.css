@@ -687,63 +687,6 @@ html.dashboard-lock .page-content {
   color: var(--ink-soft);
 }
 
-.cloud-sync-panel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  width: min(100%, 56rem);
-  margin: 0.85rem auto 0;
-  padding: 0.95rem 1.15rem;
-  border: 1px solid rgba(15, 55, 50, 0.12);
-  border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff, #f3f8f6);
-  text-align: left;
-}
-
-.cloud-sync-eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--teal);
-  font-weight: 600;
-}
-
-.cloud-sync-panel h2 {
-  margin: 0.15rem 0 0.25rem;
-  font-size: 1.05rem;
-  color: var(--teal-deep);
-}
-
-.cloud-sync-panel p {
-  margin: 0;
-  font-size: 0.88rem;
-  color: var(--ink-soft);
-  line-height: 1.4;
-}
-
-.cloud-sync-message {
-  margin-top: 0.45rem !important;
-  color: var(--teal-deep) !important;
-  font-weight: 560;
-}
-
-.cloud-sync-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.cloud-sync-actions .btn-primary,
-.cloud-sync-actions .btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-
 .dashboard-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
